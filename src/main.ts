@@ -98,6 +98,7 @@ const program = createProgram(gl, vertexShader, fragmentShader);
 const resolutionUniformLocation = gl.getUniformLocation(program, 'u_resolution');
 const maxBouncesUniformLocation = gl.getUniformLocation(program, 'u_maxBounces');
 const sampleUniformLocation = gl.getUniformLocation(program, 'u_sample');
+const timeUniformLocation = gl.getUniformLocation(program, 'u_time');
 
 
 const positionBuffer = gl.createBuffer();
@@ -119,13 +120,14 @@ gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
 
 // bind uniforms
 gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
-let cam_location = vec3.fromValues(10, 0, 0);
-let cam_forwardDirection = vec3.fromValues(-1, 0, 0);
+let cam_location = vec3.fromValues(5, 0, 0);
+let cam_forwardDirection = vec3.fromValues(-2, 0, 0);
 let cam_rightDirection = vec3.fromValues(0, 1, 0);
 const camera = new Camera(cam_location, cam_forwardDirection, cam_rightDirection, program);
 camera.bindUniforms();
 gl.uniform1i(maxBouncesUniformLocation, 5);
 gl.uniform1i(sampleUniformLocation, 1);
+gl.uniform1i(timeUniformLocation, performance.now());
 
 resize();
 
