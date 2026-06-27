@@ -1,0 +1,21 @@
+{
+    "include": [
+      "./src/*.ts",
+      "./test/*.ts",
+    ],
+    
+    "compilerOptions": {
+      "strict": true,
+      "noImplicitReturns": true,
+      "noFallthroughCasesInSwitch": true,
+      "forceConsistentCasingInFileNames": true,
+      "noImplicitOverride": true,
+      
+      "target": "ES2022",
+      "module": "ESNext",
+      "esModuleInterop": true,
+      "sourceMap": true,
+      "rootDir": "./src",
+      "outDir": "./dist",
+    },
+  }
