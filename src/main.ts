@@ -120,8 +120,8 @@ gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
 
 // bind uniforms
 gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
-let cam_location = vec3.fromValues(5, 0, 0);
-let cam_forwardDirection = vec3.fromValues(-2, 0, 0);
+let cam_location = vec3.fromValues(10, 1, 1);
+let cam_forwardDirection = vec3.fromValues(-3, 0, -0.4);
 let cam_rightDirection = vec3.fromValues(0, 1, 0);
 const camera = new Camera(cam_location, cam_forwardDirection, cam_rightDirection, program);
 camera.bindUniforms();

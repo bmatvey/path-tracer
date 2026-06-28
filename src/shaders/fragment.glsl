@@ -1,9 +1,12 @@
 #version 300 es
 precision highp float;
 
+#define TWO_PI 6.28318530718
+#define PI 3.14159265359;
+
 uniform vec2 u_resolution;
 
-const int MAX_BOUNCES = 10;
+const int MAX_BOUNCES = 7;
 uniform int u_sample;
 uniform int u_time;
 
@@ -46,13 +49,15 @@ struct Ray {
 struct Material {
     float ior;
     float translucence;
-    float diffuse;
     float reflectance;
+    float diffuse;
+    float absorption;
     float emission;
     vec3 color;
 };
 
 const Material DEFAULT_MATERIAL = Material(
+    0.,
     0.,
     0.,
     0.,
@@ -67,13 +72,20 @@ struct Sphere {
     Material material;
 };
 
+struct Triangle {
+    vec3 vert1;
+    vec3 vert2;
+    vec3 vert3;
+    Material material;
+};
+
 struct Intersection {
     float t;
     vec3 normal;
     Material material;
 };
 
-const int NUM_SPHERES = 2;
+const int NUM_SPHERES = 3;
 
 Sphere spheres[NUM_SPHERES] = Sphere[](
     Sphere(
@@ -81,29 +93,76 @@ Sphere spheres[NUM_SPHERES] = Sphere[](
         1.,
         Material(
             1.5,
-            0.,
+            0.0,
             1.,
             0.,
-            0.1,
+            0.,
+            0.,
             vec3(0.78f, 0.21f, 0.21f)
         )
     ),
     Sphere(
-        vec3(-1., 2.5, 0.),
+        vec3(0.7, 2.0, -0.1),
         1.,
+        Material(
+            1.5,
+            .0,
+            0.0,
+            1.,
+            0.,
+            0.,
+            vec3(0.9f)
+        )
+    ),
+    Sphere(
+        vec3(-3., 2., 0.4),
+        1.,
+        Material(
+            1.5,
+            0.,
+            .0,
+            1.,
+            0.,
+            0.,
+            vec3(0.21f, 0.51f, 0.78f)
+        )
+    )
+);
+
+const int NUM_TRIANGLES = 2;
+Triangle triangles[NUM_TRIANGLES] = Triangle[](
+    Triangle(
+        vec3(5., 5., -0.7),
+        vec3(-5., -5., -0.7),
+        vec3(-5., 5., -0.7),
         Material(
             1.5,
             0.,
             1.,
             0.,
-            0.1,
-            vec3(0.13f, 0.25f, 0.64f)
+            0.,
+            .0,
+            vec3(0.28f, 0.78f, 0.21f)
+        )
+    ),
+    Triangle(
+        vec3(5., 5., -0.7),
+        vec3(-5., -5., -0.7),
+        vec3(5., -5., -0.7),
+        Material(
+            1.5,
+            0.,
+            1.,
+            0.,
+            0.,
+            .0,
+            vec3(0.28f, 0.78f, 0.21f)
         )
     )
 );
 
-const vec3 GLOBAL_SUN = vec3(1., 1., 1.);
-const vec3 GLOBAL_ILLUMINATION = vec3(0.1);
+const vec3 GLOBAL_SUN = vec3(-0., 1., 0.5) * 2.; // sun location
+const vec3 GLOBAL_ILLUMINATION = vec3(0.3);
 
 Intersection intersectSphere(Intersection prevIntersect, Ray ray, Sphere sphere) {
     Intersection newIntersection = prevIntersect;
@@ -129,10 +188,107 @@ Intersection intersectSphere(Intersection prevIntersect, Ray ray, Sphere sphere)
     return newIntersection;
 }
 
+// uses Moller-Trumbore algorithm to compute collision with triangle
+Intersection intersectTriangle(Intersection prevIntersect, Ray ray, Triangle triangle) {
+    Intersection newIntersection = prevIntersect;
+    vec3 e1 = triangle.vert2 - triangle.vert1;
+    vec3 e2 = triangle.vert3 - triangle.vert1;
+    vec3 P = cross(ray.direction, e2);
+    float det = dot(e1, P);
+    if (abs(det) > 1.e-5) {
+        vec3 T = ray.position - triangle.vert1;
+        float u = dot(T, P) / det;
+        vec3 Q = cross(T, e1);
+        float v = dot(ray.direction, Q) / det;
+        float t = dot(e2, Q) / det;
+
+        if (u > 0. && u < 1. && v > 0. && u + v < 1. && t > 0. && t < prevIntersect.t) {
+            vec3 normal = normalize(cross(e1, e2));
+            normal = dot(normal, ray.direction) > 0.? -normal: normal;
+            newIntersection = Intersection(
+                t,
+                normal,
+                triangle.material
+            );
+        }
+    }
+    return newIntersection;
+}
+
+// approximates the fresnel effect of light entering a refractive surface
+float colatitude_approx(Ray ray, vec3 normal, float prevIOR, float newIOR) {
+    float R = (prevIOR - newIOR) / (prevIOR + newIOR);
+    R = R * R;
+    
+    float cosTheta = -dot(ray.direction, normal);
+    if (prevIOR > newIOR) {
+        vec3 refracted = refract(ray.direction, normal, prevIOR/newIOR);
+        if (refracted == vec3(0.)) return 1.0;
+        cosTheta = dot(normal, refracted);
+    }
+
+    float x = 1.0 - cosTheta;
+    return R + (1.0 - R) * x * x * x * x * x;
+}
+
 // Updates path throughput for given intersection, updating currentRay to the new ray direction
 vec3 updateThroughput(vec3 currentThroughput, Intersection intersection, inout Ray currentRay) {
-    currentRay.position = currentRay.position + intersection.t * currentRay.direction + 0.0001 * intersection.normal;
-    currentRay.direction = reflect(currentRay.direction, intersection.normal);
+    float intersectTypeSelector = next_rand();
+
+    if (intersectTypeSelector < intersection.material.translucence) {
+        // transmission scenario
+        // float newIOR = intersection.material.ior == currentRay.ior? 1.0: intersection.material.ior;
+        // vec3 newDir = refract(currentRay.direction, intersection.normal, currentRay.ior / newIOR);
+        // currentRay = Ray(
+        //     currentRay.position + intersection.t * currentRay.direction - 0.0001 * intersection.normal,
+        //     newDir == vec3(0.)? reflect(currentRay.direction, intersection.normal) : newDir,
+        //     newIOR
+        // );
+
+        float fresnel = colatitude_approx(currentRay, intersection.normal, currentRay.ior, intersection.material.ior);
+        float fresnelSelector = next_rand();
+        if (fresnelSelector < fresnel) {
+            currentRay = Ray(
+                currentRay.position + intersection.t * currentRay.direction + 0.0001 * intersection.normal,
+                reflect(currentRay.direction, intersection.normal),
+                currentRay.ior
+            );
+        } else {
+            float newIOR = intersection.material.ior == currentRay.ior? 1.0: intersection.material.ior;
+            vec3 newDir = refract(currentRay.direction, intersection.normal, currentRay.ior / newIOR);
+            currentRay = Ray(
+                currentRay.position + intersection.t * currentRay.direction - 0.0001 * intersection.normal,
+                newDir,
+                newIOR
+            );
+        }
+
+    } else if (intersectTypeSelector < intersection.material.translucence + intersection.material.reflectance) {
+        // reflection scenario
+        currentRay = Ray(
+            currentRay.position + intersection.t * currentRay.direction + 0.0001 * intersection.normal,
+            reflect(currentRay.direction, intersection.normal),
+            currentRay.ior
+        );
+    } else if (intersectTypeSelector < intersection.material.translucence + intersection.material.reflectance + intersection.material.diffuse){
+        // diffuse scenario
+        float theta = next_rand() * TWO_PI;
+        float phi = next_rand() * PI;
+        vec3 uniformVector = vec3(
+            sin(theta) * cos(phi),
+            sin(theta) * sin(phi),
+            cos(theta)
+        );
+        vec3 newDirection = intersection.normal + uniformVector;
+        currentRay = Ray(
+            currentRay.position + intersection.t * currentRay.direction + 0.0001 * intersection.normal,
+            normalize(newDirection),
+            currentRay.ior
+        );
+    } else {
+        currentThroughput = vec3(0);
+    };
+
     return currentThroughput * intersection.material.color;
 }
 
@@ -151,9 +307,12 @@ vec3 tracePath(Ray ray) {
         for (int s = 0; s < NUM_SPHERES; s++) {
             closestIntersection = intersectSphere(closestIntersection, currentRay, spheres[s]);
         }
+        for (int tri = 0; tri < NUM_TRIANGLES; tri++) {
+            closestIntersection = intersectTriangle(closestIntersection, currentRay, triangles[tri]);
+        }
         if (closestIntersection.t > 1.e19) {
             // ray has escaped, so check dot product with global sun
-            float sunIntensity = step(0., dot(currentRay.direction, GLOBAL_SUN));
+            float sunIntensity = step(1.1, dot(currentRay.direction, GLOBAL_SUN));
             accumulatedLight += pathThroughput * sunIntensity + pathThroughput * GLOBAL_ILLUMINATION;
             break;
         } else {
@@ -174,11 +333,12 @@ vec2 normalizeCoords() {
 
 void main() {
     init_rng();
-    vec3 coords = vec3(normalizeCoords(), -1.); // note -1 because if ihat points right, khat points out of page
+    vec2 uv = normalizeCoords();
+    vec3 coords = vec3(uv.x * u_resolution.x / u_resolution.y, uv.y, -1.); // note -1 because if ihat points right, khat points out of page
     vec3 rayDirection = normalize(u_camOrientation * coords);
     Ray fromCamera = Ray(u_camPosition, rayDirection, 1.0);
 
-    const int num_rays = 1000;
+    const int num_rays = 500;
     vec3 runningSum = vec3(0.);
     for (int i = 0; i < num_rays; i++) {
         runningSum = runningSum + tracePath(fromCamera);
