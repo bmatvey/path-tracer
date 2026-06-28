@@ -5,6 +5,8 @@ import { mat3, vec3 } from 'gl-matrix';
 import { Camera, Sphere, Triangle, GlobalLight } from '../src/3D';
 
 const DEFAULT_MAX_BOUNCES = 5;
+const CAMERA_DISTANCE = 20;
+const CAMERA_FOCAL_DISTANCE = 3;
 
 class Renderer {
 
@@ -25,6 +27,17 @@ class Renderer {
         private readonly gl: WebGL2RenderingContext
     ){
         window.addEventListener('resize', this.resize);
+        let ticking = false;
+        window.addEventListener('mousemove', (event) => {
+            if (!ticking) {
+                window.requestAnimationFrame(() => {
+                    this.moveCamera(-1.5 * event.offsetX / this.canvas.width, 1-event.offsetY / this.canvas.height);
+                    ticking = false;
+                });
+            }
+            ticking = true;
+        })
+
         this.program = this.compileShaders();
         this.gl.useProgram(this.program);
         this.pingPongBuffers = new PingPongBuffers(gl, canvas.width, canvas.height);
@@ -32,10 +45,8 @@ class Renderer {
         this.bindVertexBuffer();
 
         // place camera
-        let cam_location = vec3.fromValues(10, 1, 1);
-        let cam_forwardDirection = vec3.fromValues(-3, 0, -0.4);
-        let cam_rightDirection = vec3.fromValues(0, 1, 0);
-        this.camera = new Camera(cam_location, cam_forwardDirection, cam_rightDirection);
+        this.camera = this.moveCamera(0, 0);
+        console.log(this.camera.toString());
 
         this.globalLight = new GlobalLight(
             vec3.fromValues(0, -1, -0.5),
@@ -66,6 +77,9 @@ class Renderer {
         this.gl.bindFramebuffer(this.gl.READ_FRAMEBUFFER, writeBuffer);
         this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, null);
 
+        this.gl.clearColor(0, 0, 0, 1);
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+
         this.gl.blitFramebuffer(
             0, 0, this.canvas.width, this.canvas.height,
             0, 0, this.canvas.width, this.canvas.height,
@@ -74,13 +88,40 @@ class Renderer {
         );
     }
 
-    private moveCamera() {
+    private moveCamera(x: number, y: number) {
+        let theta = x * 2 * Math.PI;
+        let phi = y * Math.PI;
 
+        let location = vec3.fromValues(
+            CAMERA_DISTANCE * Math.sin(phi) * Math.cos(theta),
+            CAMERA_DISTANCE * Math.sin(phi) * Math.sin(theta),
+            CAMERA_DISTANCE * Math.cos(phi)
+        );
+
+        let direction = vec3.create();
+        vec3.scale(direction, location, -CAMERA_FOCAL_DISTANCE/CAMERA_DISTANCE);
+
+        let right = vec3.create();
+        vec3.cross(right, direction, vec3.fromValues(0, 1e-10, 1));
+        vec3.normalize(right, right);
+
+        this.camera = new Camera(
+            location,
+            direction,
+            right
+        );
+
+        this.sampleNumber = 0;
+
+        return this.camera;
     }
 
     public renderLoop = () => {
         if (this.sampleNumber < 500) {
             this.render();
+        } else if (this.sampleNumber === 500) {
+            this.sampleNumber++;
+            console.log('render done')
         }
 
         requestAnimationFrame(this.renderLoop);
@@ -89,7 +130,7 @@ class Renderer {
     /**
      * resize canvas to window
      */
-    private resize(): void{
+    private resize = () => {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
         this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);

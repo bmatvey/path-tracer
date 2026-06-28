@@ -34,6 +34,10 @@ export class Camera {
 
     }
 
+    public toString() {
+        return String(this.directionMatrix) + String(this.location);
+    }
+
     /**
      * @param planeNormal Normal vector of plane onto which to project
      * @param vec Vector to project
@@ -43,7 +47,6 @@ export class Camera {
         const projectionAlongNormal = vec3.scale(vec3.create(), planeNormal, vec3.dot(planeNormal, vec));
 
         return vec3.subtract(vec3.create(), vec, projectionAlongNormal);
-
     }
 
     /**
