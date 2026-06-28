@@ -13,7 +13,7 @@ uniform int u_time;
 uniform vec3 u_camPosition;
 uniform mat3 u_camOrientation;
 
-// uniform sampler2D u_previousFrame; // I'll deal with this at a later date
+uniform sampler2D u_previousFrame; // I'll deal with this at a later date
 
 out vec4 outColor;
 
@@ -353,11 +353,15 @@ void main() {
     vec3 rayDirection = normalize(u_camOrientation * coords);
     Ray fromCamera = Ray(u_camPosition, rayDirection, 1.0);
 
-    const int num_rays = 100;
+    const int num_rays = 20;
     vec3 runningSum = vec3(0.);
     for (int i = 0; i < num_rays; i++) {
         runningSum = runningSum + tracePath(fromCamera);
     }
-    
-    outColor = vec4(runningSum / float(num_rays), 1.0);
+
+    outColor = mix(
+        texture(u_previousFrame, gl_FragCoord.xy/u_resolution),
+        vec4(runningSum / float(num_rays), 1.0),
+        1.0 / float(u_sample)
+    );
 }
