@@ -6,7 +6,7 @@ precision highp float;
 
 uniform vec2 u_resolution;
 
-const int MAX_BOUNCES = 7;
+const int MAX_BOUNCES = 5;
 uniform int u_sample;
 uniform int u_time;
 
@@ -102,13 +102,13 @@ Sphere spheres[NUM_SPHERES] = Sphere[](
         )
     ),
     Sphere(
-        vec3(0.7, 2.0, -0.1),
+        vec3(0.7, 2.0, 0.3),
         1.,
         Material(
             1.5,
-            .0,
+            1.0,
             0.0,
-            1.,
+            0.,
             0.,
             0.,
             vec3(0.9f)
@@ -138,8 +138,8 @@ Triangle triangles[NUM_TRIANGLES] = Triangle[](
         Material(
             1.5,
             0.,
-            1.,
             0.,
+            1.,
             0.,
             .0,
             vec3(0.28f, 0.78f, 0.21f)
@@ -152,8 +152,8 @@ Triangle triangles[NUM_TRIANGLES] = Triangle[](
         Material(
             1.5,
             0.,
-            1.,
             0.,
+            1.,
             0.,
             .0,
             vec3(0.28f, 0.78f, 0.21f)
@@ -161,8 +161,21 @@ Triangle triangles[NUM_TRIANGLES] = Triangle[](
     )
 );
 
-const vec3 GLOBAL_SUN = vec3(-0., 1., 0.5) * 2.; // sun location
-const vec3 GLOBAL_ILLUMINATION = vec3(0.3);
+struct GlobalLighting {
+    vec3 sun; // direction of rays
+    float sunIntensity; // strength of sun illumination
+    float sunCosineThreshold; // minimal cosine of ray to sun direction angle giving illumination
+    vec3 sunColor; // color of sunlight
+    vec3 globalIllumination; // intensity of global illumination
+};
+
+uniform GlobalLighting GLOBAL_LIGHT; //= GlobalLighting(
+//     vec3(0., -1., -0.5),
+//     1.,
+//     0.7,
+//     vec3(1.),
+//     vec3(0.3)
+// );
 
 Intersection intersectSphere(Intersection prevIntersect, Ray ray, Sphere sphere) {
     Intersection newIntersection = prevIntersect;
@@ -312,8 +325,10 @@ vec3 tracePath(Ray ray) {
         }
         if (closestIntersection.t > 1.e19) {
             // ray has escaped, so check dot product with global sun
-            float sunIntensity = step(1.1, dot(currentRay.direction, GLOBAL_SUN));
-            accumulatedLight += pathThroughput * sunIntensity + pathThroughput * GLOBAL_ILLUMINATION;
+            float sunIntensity = GLOBAL_LIGHT.sunIntensity * step(GLOBAL_LIGHT.sunCosineThreshold, 
+                dot(currentRay.direction, -GLOBAL_LIGHT.sun)
+            );
+            accumulatedLight += pathThroughput * GLOBAL_LIGHT.sunColor * sunIntensity + pathThroughput * GLOBAL_LIGHT.globalIllumination;
             break;
         } else {
             // ray hit a surface
@@ -338,7 +353,7 @@ void main() {
     vec3 rayDirection = normalize(u_camOrientation * coords);
     Ray fromCamera = Ray(u_camPosition, rayDirection, 1.0);
 
-    const int num_rays = 500;
+    const int num_rays = 100;
     vec3 runningSum = vec3(0.);
     for (int i = 0; i < num_rays; i++) {
         runningSum = runningSum + tracePath(fromCamera);
