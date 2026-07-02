@@ -2,7 +2,7 @@
 precision highp float;
 
 #define TWO_PI 6.28318530718
-#define PI 3.14159265359;
+#define PI 3.14159265359
 
 uniform vec2 u_resolution;
 
@@ -13,7 +13,7 @@ uniform int u_time;
 uniform vec3 u_camPosition;
 uniform mat3 u_camOrientation;
 
-uniform sampler2D u_previousFrame; // I'll deal with this at a later date
+uniform sampler2D u_previousFrame; 
 
 out vec4 outColor;
 
@@ -45,7 +45,6 @@ struct Ray {
     float ior;
 };
 
-// Material types: 0 = glass, 1 = diffuse, 2 = metallic, 3 = emission
 struct Material {
     float ior;
     float translucence;
@@ -53,7 +52,9 @@ struct Material {
     float diffuse;
     float absorption;
     float emission;
+    vec2 padding1;
     vec3 color;
+    float padding2;
 };
 
 const Material DEFAULT_MATERIAL = Material(
@@ -63,7 +64,9 @@ const Material DEFAULT_MATERIAL = Material(
     0.,
     0.,
     0.,
-    vec3(1.)
+    vec2(0.),
+    vec3(1.),
+    0.
 );
 
 struct Sphere {
@@ -87,79 +90,95 @@ struct Intersection {
 
 const int NUM_SPHERES = 3;
 
-Sphere spheres[NUM_SPHERES] = Sphere[](
-    Sphere(
-        vec3(-1., 0., 0.),
-        1.,
-        Material(
-            1.5,
-            0.0,
-            1.,
-            0.,
-            0.,
-            0.,
-            vec3(0.78f, 0.21f, 0.21f)
-        )
-    ),
-    Sphere(
-        vec3(0.7, 2.0, 0.3),
-        1.,
-        Material(
-            1.5,
-            1.0,
-            0.0,
-            0.,
-            0.,
-            0.,
-            vec3(0.9f)
-        )
-    ),
-    Sphere(
-        vec3(-3., 2., 0.4),
-        1.,
-        Material(
-            1.5,
-            0.,
-            .0,
-            1.,
-            0.,
-            0.,
-            vec3(0.21f, 0.51f, 0.78f)
-        )
-    )
-);
+// Sphere spheres[NUM_SPHERES] = Sphere[](
+//     Sphere(
+//         vec3(-1., 2., 0.),
+//         1.,
+//         Material(
+//             1.5,
+//             1.0,
+//             0.,
+//             0.,
+//             0.,
+//             0.,
+//             vec2(0.),
+//             vec3(0.78f, 0.21f, 0.21f),
+//             0.
+//         )
+//     ),
+//     Sphere(
+//         vec3(1.5, 0., 0.),
+//         1.,
+//         Material(
+//             1.5,
+//             1.0,
+//             0.0,
+//             0.,
+//             0.,
+//             0.,
+//             vec2(0.),
+//             vec3(0.9f),
+//             0.
+//         )
+//     ),
+//     Sphere(
+//         vec3(-1., -2., 0.),
+//         1.,
+//         Material(
+//             1.5,
+//             1.,
+//             .0,
+//             0.,
+//             0.,
+//             0.,
+//             vec2(0.),
+//             vec3(0.21f, 0.51f, 0.78f),
+//             0.
+//         )
+//     )
+// );
 
 const int NUM_TRIANGLES = 2;
-Triangle triangles[NUM_TRIANGLES] = Triangle[](
-    Triangle(
-        vec3(5., 5., -0.7),
-        vec3(-5., -5., -0.7),
-        vec3(-5., 5., -0.7),
-        Material(
-            1.5,
-            0.,
-            0.,
-            1.,
-            0.,
-            .0,
-            vec3(0.28f, 0.78f, 0.21f)
-        )
-    ),
-    Triangle(
-        vec3(5., 5., -0.7),
-        vec3(-5., -5., -0.7),
-        vec3(5., -5., -0.7),
-        Material(
-            1.5,
-            0.,
-            0.,
-            1.,
-            0.,
-            .0,
-            vec3(0.28f, 0.78f, 0.21f)
-        )
-    )
-);
+// Triangle triangles[NUM_TRIANGLES] = Triangle[](
+//     Triangle(
+//         vec3(5., 5., -1.),
+//         vec3(-5., -5., -1.),
+//         vec3(-5., 5., -1.),
+//         Material(
+//             1.5,
+//             0.,
+//             0.,
+//             1.,
+//             0.,
+//             .0,
+//             vec2(0.),
+//             vec3(0.28f, 0.78f, 0.21f),
+//             0.
+//         )
+//     ),
+//     Triangle(
+//         vec3(5., 5., -1.),
+//         vec3(-5., -5., -1.),
+//         vec3(5., -5., -1.),
+//         Material(
+//             1.5,
+//             0.,
+//             0.,
+//             1.,
+//             0.,
+//             .0,
+//             vec2(0.),
+//             vec3(0.28f, 0.78f, 0.21f),
+//             0.
+//         )
+//     )
+// );
+
+layout(std140) uniform objectBuffer {
+    Sphere spheres[NUM_SPHERES];
+    Triangle triangles[NUM_TRIANGLES];
+};
+
 
 struct GlobalLighting {
     vec3 sun; // direction of rays
@@ -169,13 +188,7 @@ struct GlobalLighting {
     vec3 globalIllumination; // intensity of global illumination
 };
 
-uniform GlobalLighting GLOBAL_LIGHT; //= GlobalLighting(
-//     vec3(0., -1., -0.5),
-//     1.,
-//     0.7,
-//     vec3(1.),
-//     vec3(0.3)
-// );
+uniform GlobalLighting GLOBAL_LIGHT;
 
 Intersection intersectSphere(Intersection prevIntersect, Ray ray, Sphere sphere) {
     Intersection newIntersection = prevIntersect;
@@ -364,4 +377,5 @@ void main() {
         vec4(runningSum / float(num_rays), 1.0),
         1.0 / float(u_sample)
     );
+
 }

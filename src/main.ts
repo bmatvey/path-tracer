@@ -2,16 +2,16 @@ import vertexShaderSource from './shaders/vertex.glsl';
 import fragmentShaderSource from './shaders/fragment.glsl';
 import { createProgram, createShader } from '../src/shader_helpers';
 import { mat3, vec3 } from 'gl-matrix';
-import { Camera, Sphere, Triangle, GlobalLight } from '../src/3D';
+import { Camera, Sphere, Triangle, GlobalLight, Material } from '../src/3D';
 
 const DEFAULT_MAX_BOUNCES = 5;
-const CAMERA_DISTANCE = 20;
+const CAMERA_DISTANCE = 15;
 const CAMERA_FOCAL_DISTANCE = 3;
 
 class Renderer {
 
-    private readonly spheres: Sphere[] = [];
-    private readonly triangles: Triangle[] = [];
+    private readonly spheres: Sphere[] = [new Sphere(vec3.fromValues(0, 0, 0), 0, new Material(0, 0, 0, 0, 0, 0, vec3.create()))];
+    private readonly triangles: Triangle[] = [new Triangle(vec3.create(), vec3.create(), vec3.create(), new Material(0, 0, 0, 0, 0, 0, vec3.create()))];
     private readonly globalLight: GlobalLight;
     private camera: Camera;
     private readonly uniforms: Map<string, WebGLUniformLocation> = new Map();
@@ -20,6 +20,8 @@ class Renderer {
     private fragShaderSource: string = fragmentShaderSource;
     private sampleNumber: number = 0;
     private pingPongBuffers: PingPongBuffers;
+    private objectBuffer: WebGLBuffer; 
+    private cameraOffset: [number, number] = [0, 0];
 
 
     public constructor (
@@ -28,16 +30,34 @@ class Renderer {
     ){
         window.addEventListener('resize', this.resize);
         let ticking = false;
+        let moving = true;
         window.addEventListener('mousemove', (event) => {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
-                    this.moveCamera(-1.5 * event.offsetX / this.canvas.width, 1-event.offsetY / this.canvas.height);
+                    if (moving) {
+                        const cameraX = event.offsetX - this.cameraOffset[0];
+                        const cameraY = event.offsetY - this.cameraOffset[1];
+                        this.moveCamera(-1.5 * cameraX / this.canvas.width, 1-cameraY / this.canvas.height);
+                    }
                     ticking = false;
                 });
             }
             ticking = true;
-        })
+        });
 
+        window.addEventListener('mousedown', (event) => {
+            // if (moving) {
+            //     this.cameraOffset = [event.offsetX, event.offsetY];
+            // } else {
+            // }
+            
+            this.cameraOffset = [event.offsetX - this.cameraOffset[0], event.offsetY - this.cameraOffset[1]]; // this is voodoo magic but it works trust
+
+            moving = !moving;
+            console.log(this.cameraOffset);
+        });
+
+        this.objectBuffer = this.gl.createBuffer();
         this.program = this.compileShaders();
         this.gl.useProgram(this.program);
         this.pingPongBuffers = new PingPongBuffers(gl, canvas.width, canvas.height);
@@ -89,8 +109,8 @@ class Renderer {
     }
 
     private moveCamera(x: number, y: number) {
-        let theta = x * 2 * Math.PI;
-        let phi = y * Math.PI;
+        let theta = x * 2 * Math.PI % (2 * Math.PI);
+        let phi = y * Math.PI % (2 * Math.PI);
 
         let location = vec3.fromValues(
             CAMERA_DISTANCE * Math.sin(phi) * Math.cos(theta),
@@ -148,8 +168,8 @@ class Renderer {
     private compileShaders() {
         // update constants in shader source
         this.fragShaderSource = this.fragShaderSource.replace(/const int MAX_BOUNCES = \d+;/, `const int MAX_BOUNCES = ${this.maxBounces};`);
-        // this.fragShaderSource = this.fragShaderSource.replace(/const int NUM_SPHERES = \d+;/, `const int NUM_SPHERES = ${this.spheres.length};`);
-        // this.fragShaderSource = this.fragShaderSource.replace(/const int NUM_TRIANGLES = \d+;/, `const int NUM_TRIANGLES = ${this.triangles.length};`);
+        this.fragShaderSource = this.fragShaderSource.replace(/const int NUM_SPHERES = \d+;/, `const int NUM_SPHERES = ${this.spheres.length};`);
+        this.fragShaderSource = this.fragShaderSource.replace(/const int NUM_TRIANGLES = \d+;/, `const int NUM_TRIANGLES = ${this.triangles.length};`);
 
         // compile and set up shaders
         
@@ -159,12 +179,23 @@ class Renderer {
         this.program = createProgram(this.gl, vertexShader, fragmentShader);
         
         // find uniform locations
-        const uniformNames: Array<string> = ['u_resolution', 'u_sample', 'u_time'];
+        const uniformNames: Array<string> = ['u_resolution', 'u_sample', 'u_time', 'u_previousFrame'];
         for (const uName of uniformNames) {
             const uniformLocation = this.gl.getUniformLocation(this.program, uName);
             if (uniformLocation === null) {throw new Error(`Cannot find uniform ${uName}`);}
             this.uniforms.set(uName, uniformLocation);
         }
+
+        // bind object buffer
+        this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.objectBuffer);
+        this.gl.bufferData(this.gl.UNIFORM_BUFFER, this.generateObjectData(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, null);
+
+        const blockIndex = this.gl.getUniformBlockIndex(this.program, "objectBuffer");
+        const bindingPoint = 1  ; // Pick an arbitrary binding point slot (1-15+)
+
+        this.gl.uniformBlockBinding(this.program, blockIndex, bindingPoint);
+        this.gl.bindBufferBase(this.gl.UNIFORM_BUFFER, bindingPoint, this.objectBuffer);
 
         return this.program;
     }
@@ -192,13 +223,31 @@ class Renderer {
         const resolutionUniformLocation = this.uniforms.get('u_resolution') as WebGLUniformLocation;
         const sampleUniformLocation = this.uniforms.get('u_sample') as WebGLUniformLocation;
         const timeUniformLocation = this.uniforms.get('u_time') as WebGLUniformLocation;
+        const previousFrameUniformLocation = this.uniforms.get('u_previousFrame') as WebGLUniformLocation;
 
         this.gl.uniform2f(resolutionUniformLocation, this.gl.canvas.width, this.gl.canvas.height);
         this.gl.uniform1i(sampleUniformLocation, this.sampleNumber);
         this.gl.uniform1i(timeUniformLocation, performance.now());
+        this.gl.uniform1i(previousFrameUniformLocation, 0);
         this.camera.setUniforms(this.gl, this.program);
         this.globalLight.setUniforms(this.gl, this.program);
 
+        this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.objectBuffer);
+        this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, this.generateObjectData());
+    }
+
+    // TODO: make this function work properly
+    private generateObjectData(): Float32Array {
+        return new Float32Array([
+            0, 0, 0,
+            1,
+            1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0,
+
+            5, 5, -1, 0,
+            -5, -5, -1, 0,
+            5, -5, -1, 0,
+            1.5, 0, 0, 1, 0, 0, 0, 0, 0.28, 0.78, 0.21, 0,
+        ]);
     }
 }
 

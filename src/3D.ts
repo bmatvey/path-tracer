@@ -65,11 +65,35 @@ export class Camera {
     }
 }
 
-export class Sphere {
-
+export class Material {
+    public constructor (
+        private ior: number,
+        private translucence: number,
+        private reflectance: number,
+        private diffuse: number,
+        private absorption: number,
+        private emission: number,
+        private color: vec3
+    ) {}
 }
 
+// should be immutable (can't move)
+export class Sphere {
+    public constructor (
+        private position: vec3,
+        private radius: number,
+        private material: Material
+    ) {}
+}
+
+// should be immutable (can't move)
 export class Triangle {
+    public constructor (
+        private vert1: vec3,
+        private vert2: vec3,
+        private vert3: vec3,
+        private material: Material
+    ) {}
 
 }
 
