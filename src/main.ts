@@ -3,15 +3,20 @@ import fragmentShaderSource from './shaders/fragment.glsl';
 import { createProgram, createShader } from '../src/shader_helpers';
 import { mat3, vec3 } from 'gl-matrix';
 import { Camera, Sphere, Triangle, GlobalLight, Material } from '../src/3D';
+import { cos } from 'mathjs';
 
 const DEFAULT_MAX_BOUNCES = 5;
 const CAMERA_DISTANCE = 15;
 const CAMERA_FOCAL_DISTANCE = 3;
 
+const BASIC_MATERIAL = new Material(1, 0, 0, 1, 0, 0, vec3.fromValues(1, 1, 1));
+
 class Renderer {
 
-    private readonly spheres: Sphere[] = [new Sphere(vec3.fromValues(0, 0, 0), 0, new Material(0, 0, 0, 0, 0, 0, vec3.create()))];
-    private readonly triangles: Triangle[] = [new Triangle(vec3.create(), vec3.create(), vec3.create(), new Material(0, 0, 0, 0, 0, 0, vec3.create()))];
+    // must be initialized with something to not throw error
+    // TODO eventually get rid of this silly empty object nonsense
+    private readonly spheres: Sphere[] = [new Sphere(vec3.fromValues(0, 0, 0), 0, BASIC_MATERIAL)];
+    private readonly triangles: Triangle[] = [new Triangle(vec3.fromValues(0, 0, 0), vec3.fromValues(0, 0, 0), vec3.fromValues(0, 0, 0), BASIC_MATERIAL)];
     private readonly globalLight: GlobalLight;
     private camera: Camera;
     private readonly uniforms: Map<string, WebGLUniformLocation> = new Map();
@@ -46,10 +51,6 @@ class Renderer {
         });
 
         window.addEventListener('mousedown', (event) => {
-            // if (moving) {
-            //     this.cameraOffset = [event.offsetX, event.offsetY];
-            // } else {
-            // }
             
             this.cameraOffset = [event.offsetX - this.cameraOffset[0], event.offsetY - this.cameraOffset[1]]; // this is voodoo magic but it works trust
 
@@ -122,7 +123,7 @@ class Renderer {
         vec3.scale(direction, location, -CAMERA_FOCAL_DISTANCE/CAMERA_DISTANCE);
 
         let right = vec3.create();
-        vec3.cross(right, direction, vec3.fromValues(0, 1e-10, 1));
+        vec3.cross(right, direction, vec3.fromValues(0, 1e-11, 1));
         vec3.normalize(right, right);
 
         this.camera = new Camera(
@@ -236,18 +237,34 @@ class Renderer {
         this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, this.generateObjectData());
     }
 
-    // TODO: make this function work properly
     private generateObjectData(): Float32Array {
-        return new Float32Array([
-            0, 0, 0,
-            1,
-            1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0,
+        const objectData = new Float32Array(this.spheres.length * Sphere.size + this.triangles.length * Triangle.size);
+        let offset = 0;
+        for (const sphere of this.spheres) {
+            sphere.writeObjectData(objectData, offset);
+            offset += Sphere.size;
+        }
 
-            5, 5, -1, 0,
-            -5, -5, -1, 0,
-            5, -5, -1, 0,
-            1.5, 0, 0, 1, 0, 0, 0, 0, 0.28, 0.78, 0.21, 0,
-        ]);
+        for (const triangle of this.triangles) {
+            triangle.writeObjectData(objectData, offset);
+            offset += Triangle.size;
+        }
+        
+        return objectData;
+    }
+
+    public addSphere(sphere: Sphere) {
+        this.spheres.push(sphere);
+
+        this.program = this.compileShaders();
+        this.gl.useProgram(this.program);
+    }
+
+    public addTriangle(triangle: Triangle) {
+        this.triangles.push(triangle);
+
+        this.program = this.compileShaders();
+        this.gl.useProgram(this.program);
     }
 }
 
@@ -325,3 +342,77 @@ if (!gl.getExtension('EXT_color_buffer_float')) {
 }
 
 const renderer = new Renderer(canvas, gl);
+
+// renderer.addSphere(new Sphere(vec3.fromValues(0, 0, 0), 1, BASIC_MATERIAL));
+// renderer.addTriangle(new Triangle(
+//     vec3.fromValues(5, 5, 0),
+//     vec3.fromValues(-5, -5, 0),
+//     vec3.fromValues(-5, 5, 0),
+//     BASIC_MATERIAL
+// ))
+
+// const glass = new Material(
+//     1.5,
+//     1,
+//     0,
+//     0,
+//     0,
+//     0,
+//     vec3.fromValues(0.9, 0.9, 0.9)
+// )
+// const faces = [
+//     [vec3.fromValues(1, 0, 0), vec3.fromValues(0, 1, 0), vec3.fromValues(0, 0, 1)],
+//     [vec3.fromValues(1, 0, 0), vec3.fromValues(0, 1, 0), vec3.fromValues(0, 0, 0)],
+//     [vec3.fromValues(1, 0, 0), vec3.fromValues(0, 0, 0), vec3.fromValues(0, 0, 1)],
+//     [vec3.fromValues(0, 0, 0), vec3.fromValues(0, 1, 0), vec3.fromValues(0, 0, 1)]
+// ]
+
+// for (const verts of faces) {
+//     renderer.addTriangle(new Triangle(verts[0], verts[1], verts[2], glass));
+// }
+
+const BOX_SIZE = 7
+
+for (let i = 0; i < 20; i++) {
+    renderer.addSphere(new Sphere(
+        vec3.fromValues((Math.random()-0.5) * BOX_SIZE, (Math.random() - 0.5) * BOX_SIZE, (Math.random() - 0.5) * BOX_SIZE),
+        Math.random(),
+        new Material(
+            1.5,
+            1,
+            0,
+            0,
+            0,
+            0.1,
+            vec3.fromValues(Math.random(), Math.random(), Math.random())
+        )
+    ));
+
+    renderer.addSphere(new Sphere(
+        vec3.fromValues((Math.random()-0.5) * BOX_SIZE, (Math.random() - 0.5) * BOX_SIZE, (Math.random() - 0.5) * BOX_SIZE),
+        Math.random(),
+        new Material(
+            1.5,
+            0,
+            1,
+            0,
+            0,
+            0.1,
+            vec3.fromValues(Math.random(), Math.random(), Math.random())
+        )
+    ));
+
+    renderer.addSphere(new Sphere(
+        vec3.fromValues((Math.random()-0.5) * BOX_SIZE, (Math.random() - 0.5) * BOX_SIZE, (Math.random() - 0.5) * BOX_SIZE),
+        Math.random(),
+        new Material(
+            1.5,
+            0,
+            0,
+            1,
+            0,
+            0.1,
+            vec3.fromValues(Math.random(), Math.random(), Math.random())
+        )
+    ))
+}
