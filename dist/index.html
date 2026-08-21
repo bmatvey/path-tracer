@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+<head>
+    <meta charset="UTF-8">
+    <title>Path Tracing</title>
+  <script type="module" crossorigin src="/assets/index-8VWgrlHg.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DBd3O0_5.css">
+</head>
+<body>
+    <canvas id="webgl-canvas"></canvas>
+
+    <div id="ui-container" style="position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.7); padding: 15px; font-family: sans-serif; border-radius: 5px;">
+        <div>
+            <label for="scene-selector"><strong>Scene: </strong></label>
+            <select id="scene-selector">
+                <option value="0">Orange Glow</option>
+                <option value="1">Neon Lights</option>
+                <option value="2">Glass Prism</option>
+                <option value="3">Green Pastels</option>
+                <option value="4">Random Spheres</option>
+            </select>
+        </div>
+        <div style="margin-top: 15px;">
+            <label for="bounces-slider"><strong>Max Bounces: </strong> <span id="bounces-value">5</span></label><br>
+            <input type="range" id="bounces-slider" min="1" max="10" value="5">
+        </div>
+        <div style="margin-top: 15px;">
+            <label for="rays-per-frame-slider"><strong>Rays Per Frame: </strong> <span id="rays-per-frame-value">10</span></label><br>
+            <input type="range" id="rays-per-frame-slider" min="1" max="40" value="10">
+        </div>
+        <div style="margin-top: 15px;">
+            <label for="max-iters-slider"><strong>Max Iterations: </strong> <span id="max-iters-value">10000</span></label><br>
+            <input type="range" id="max-iters-slider" min="1" max="40000" value="10000">
+        </div>
+    </div>
+
+</body>
+
+</html>
